@@ -6,7 +6,9 @@ This repository implements Kinematics & Dynamics Solver for the robot 'nyu_finge
 
 ## Description
 1. Rendering of the model in Meshcatviwer,
-    <p align="left"><img src="pictures/snap_viewer.png" width="400"></p>
+    <p align="left"><img src="pictures/snap_viewer.png" width="300"></p>
+1. Plotting Trajectories,
+    <p align="left"><img src="pictures/trajectory_viewer.png" width="300"></p>
 
 
 ## Dependencies
