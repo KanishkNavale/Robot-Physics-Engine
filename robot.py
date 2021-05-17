@@ -62,6 +62,11 @@ class Robot:
 
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
+        
+        # Joint Dynamics Defaults
+        self.Kp = 2
+        self.Kd = 0.02
+        self.Ki = 0.01
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
@@ -163,38 +168,34 @@ class Robot:
     ####################################################################################################################
     # Definition to Compute Collisions
     def set_JointStates(self, target_q):
-        q, v = self.device.get_state()
-        q0 = copy.deepcopy(q)
-        v = np.zeros(3)
-        
-        # Constants
-        tau = 0.01
-        N = 5
+        tau = .01
+        N = 10
         T = N*tau
-        Kp = 2.5
-        Kd = 2*np.sqrt(Kp)
-        Ki = 0.02
-        ERR = []
-        ERR.append(target_q - q0)
 
-        for i in range(N):
-            print (target_q - q, np.sum(ERR))
-            t = i * tau
-            # Sine Profile Motion
-            q += 0.5*(1-np.cos((np.pi*t)/T))*(target_q-q)
-            #v = 0.5*(1-np.cos((np.pi*t)/T))*(np.zeros(3)-v)
-            
-            u = Kp*(target_q-q) + Ki*np.sum(ERR)
-            self.device.send_joint_torque(u)
+        # Goal Set Points
+        q_goal = target_q
+        v_goal = np.zeros(3)
+        a_goal = np.zeros(3)
 
-            #q, v = self.device.get_state()
-            ERR.append(target_q - q)
-            
-            sleep(1)
+        # Init. Values
+        q, v = self.device.get_state()
 
+        # For the Ki Tuning
+        Err_list=[]
         
+        for i in range(N):
+            t = i * tau
+            
+            q =  q_goal - (q*t)/N
+            v =  v_goal - (v*t)/N
 
+            # d) PID controller
+            u = self.Kp*(q_goal - q) + self.Kd*(v_goal - v) + self.Ki* np.sum(Err_list)
 
+            Err_list.append(q_goal - q)
+            sleep(tau)
+
+    
 #######################################################################################################################
 # MAIN Runtime                                                                                           ##############
 #######################################################################################################################
