@@ -1,9 +1,9 @@
 ######################################################################################################################
-#DEVELOPED BY KANISHK                                                                                    #############
-#MAX PLANCK INSTITUTE FOR INTELLIGENT SYSTEMS                                                            #############
-#STUTTGART, GERMANY                                                                                      #############
+# DEVELOPED BY KANISHK                                                                                   #############
+# MAX PLANCK INSTITUTE FOR INTELLIGENT SYSTEMS                                                           #############
+# STUTTGART, GERMANY                                                                                     #############
                                                                                                          #############
-#THIS SCRIPT CONSTRUCTS A ROBOT CLASS BASED ON FUNCTIONALITIES FROM THE 'FORGE'                          #############
+# THIS SCRIPT CONSTRUCTS A ROBOT CLASS BASED ON FUNCTIONALITIES FROM THE 'FORGE'                         #############
 ######################################################################################################################
 
 # Library Imports
@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 plt.style.use('dark_background')
 
 import os
+import copy
 from time import sleep
 
 #######################################################################################################################
@@ -53,6 +54,8 @@ class Robot:
         self.viz = GepettoVisualizer(self.model, self.collision_model, self.visual_model)
         self.viz.initViewer()
         self.viz.loadViewerModel("nyu_finger")
+        self.viz.displayCollisions(True)
+        self.viz.displayVisuals(True)
         q = pin.neutral(self.model)
         q, _ = self.device.get_state()
         self.viz.display(q)
@@ -61,7 +64,7 @@ class Robot:
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
 
     ####################################################################################################################
-    # KINEMATICS                                                                                        ################
+    # KINEMATICS                                                                                          ##############
     ####################################################################################################################
     # Computing Forward Kinematics
     def compute_ForwardKinematics(self, q):
@@ -144,18 +147,64 @@ class Robot:
 
 
     ####################################################################################################################
-    # COLLISIONS COMPUTATIONS                                                                           ################
+    # COLLISIONS COMPUTATIONS                                                                             ##############
     ####################################################################################################################
     # Definition to Compute Collisions
     def compute_Collisions(self,q):
-        pin.computeCollisions(self.model,self.data,self.collision_model,self.collision_data,q,False)
+        pin.computeCollisions(self.model, self.model_data, self.collision_model ,self.collision_data, q, False)
         for k in range(len(self.collision_model.collisionPairs)): 
             cr = self.collision_data.collisionResults[k]
+        self.viz.displayCollisions(True)
+        self.viz.displayVisuals(True)
         return cr.isCollision()
 
+    ####################################################################################################################
+    # JOINT DYNAMICS                                                                                      ##############
+    ####################################################################################################################
+    # Definition to Compute Collisions
+    def set_JointStates(self, target_q):
+        q, v = self.device.get_state()
+        q0 = copy.deepcopy(q)
+        v = np.zeros(3)
+        
+        # Constants
+        tau = 0.01
+        N = 5
+        T = N*tau
+        Kp = 2.5
+        Kd = 2*np.sqrt(Kp)
+        Ki = 0.02
+        ERR = []
+        ERR.append(target_q - q0)
 
-#####################################################################################
+        for i in range(N):
+            print (target_q - q, np.sum(ERR))
+            t = i * tau
+            # Sine Profile Motion
+            q += 0.5*(1-np.cos((np.pi*t)/T))*(target_q-q)
+            #v = 0.5*(1-np.cos((np.pi*t)/T))*(np.zeros(3)-v)
+            
+            u = Kp*(target_q-q) + Ki*np.sum(ERR)
+            self.device.send_joint_torque(u)
 
-# Main Section
+            #q, v = self.device.get_state()
+            ERR.append(target_q - q)
+            
+            sleep(1)
+
+        
+
+
+#######################################################################################################################
+# MAIN Runtime                                                                                           ##############
+#######################################################################################################################
 if __name__ == "__main__":
     robot = Robot(NYUFingerReal(), 'enp5s0')
+
+
+    target, _ = robot.device.get_state()
+    robot.viz.display(target)
+    #robot.set_JointStates(target)
+    tau = pin.rnea(robot.model, robot.model_data, np.zeros(3),np.ones(3),np.zeros(3))
+    print (tau)
+    robot.device.send_joint_torque(tau)
