@@ -64,6 +64,12 @@ class Robot:
 
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
+        # Get the FrameID of the Base
+        self.Base_ID = self.model.getFrameID('base_link')
+        
+        # Enable Dynamic Compensation
+        q, v = self.device.get_state()
+        self.set_DynamicCompensation(True, q, v, np.zeros(3))
 
 
     ####################################################################################################################
@@ -180,6 +186,7 @@ class Robot:
         # Goal Set Points
         q_goal = target_q
         v_goal = np.zeros(3)
+        a_goal = np.zeros(3)
 
         # Init. Values
         q, v = self.device.get_state()
@@ -187,18 +194,22 @@ class Robot:
         # Joint Dynamics Defaults
         self.Kp = 1.5
         self.Kd = 0.15
-        self.Ki = 0.5
+        self.Ki = 1e-4
 
         # For the Ki Tuning
         Err_log=[]
         Err_log.append(q_goal - q)
         
         for i in range(1, N+1):
+            # Disable Dynamic Compensation
+            self.set_DynamicCompensation(False, q_goal, v_goal, a_goal)
+            
             t = i * tau
             
             # Compute Step Angles
-            q =  q_goal - (q*t)/T
-            v =  v_goal - (v*t)/T
+            q = q_goal - (q*t)/T
+            v = v_goal - (v*t)/T
+            a = a_goal - (a*t)/T
 
             # PID controller
             u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) + self.Kd*(v_goal - v) 
@@ -212,14 +223,20 @@ class Robot:
 
             Err_log.append(q_goal - q)
             sleep(tau)
+            
+        # Restart Dynamic Compensation
+        self.set_DynamicCompensation(True, q_goal, v_goal, a_goal)
 
 
     ####################################################################################################################
-    # GRAVITY COMPENSATION                                                                                ##############
+    # GRAVITY COMPENSATION + Other Inverse Dynamics Compensations                                          ##############
     ####################################################################################################################
-    # Definition to compute and set gravity compensation
-    def set_GravityCompensation(self):
-        pass
+    # Definition to compute Inverse Dynamics Gravity + Inertia + NLE Forces + Centrifugal & Corrolis 
+    def set_DynamicCompensation(self, enable, set_state, set_velocity, set_acc):
+        while(enable):
+            # Computing Inverse Dynamics for stall torque
+            tau = pin.rnea(robot.model, robot.model_data, set_state, set_velocity, set_acc)
+            self.device.send_joint_torque(tau)
   
 
     
