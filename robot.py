@@ -23,6 +23,7 @@ import os
 import copy
 from time import sleep
 
+
 #######################################################################################################################
 # Class Construct of the robot                                                                            #############
 #######################################################################################################################
@@ -63,6 +64,7 @@ class Robot:
 
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
+
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
@@ -165,6 +167,7 @@ class Robot:
         self.viz.displayVisuals(True)
         return cr.isCollision()
 
+
     ####################################################################################################################
     # JOINT DYNAMICS                                                                                      ##############
     ####################################################################################################################
@@ -186,18 +189,6 @@ class Robot:
         self.Kd = 0.15
         self.Ki = 0.5
 
-        # One Step Set
-        pos_err = q_goal - q
-        while np.linalg.norm(pos_err) >= 0.1:
-            u = self.Kp * pos_err
-            self.device.send_joint_torque(u)
-            q, v = self.device.get_state()
-            pos_err = q_goal - q
-            self.viz.display(q)
-            sleep(1)
-
-
-        """
         # For the Ki Tuning
         Err_log=[]
         Err_log.append(q_goal - q)
@@ -210,7 +201,7 @@ class Robot:
             v =  v_goal - (v*t)/T
 
             # PID controller
-            u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) #+ self.Kd*(v_goal - v) 
+            u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) + self.Kd*(v_goal - v) 
 
             # Send torque commands
             self.device.send_joint_torque(u)
@@ -220,7 +211,7 @@ class Robot:
             self.viz.display(q)
 
             Err_log.append(q_goal - q)
-            sleep(tau)"""
+            sleep(tau)
 
     
 #######################################################################################################################
