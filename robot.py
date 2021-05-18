@@ -7,6 +7,7 @@
 ######################################################################################################################
 
 # Library Imports
+from numpy.lib.npyio import save
 from nyu_finger import NYUFingerReal
 
 import pinocchio as pin
@@ -62,47 +63,45 @@ class Robot:
 
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
-        
-        # Joint Dynamics Defaults
-        self.Kp = 2
-        self.Kd = 0.02
-        self.Ki = 0.01
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
     ####################################################################################################################
     # Computing Forward Kinematics
     def compute_ForwardKinematics(self, q):
-        pin.framesForwardKinematics(self.model, self.data, q)
-        pos = np.array(self.data.oMf[self.EOAT_ID].translation)
+        pin.framesForwardKinematics(self.model, self.model_data, q)
+        pos = np.array(self.model_data.oMf[self.EOAT_ID].translation)
         return pos
 
 
     # Compute the Jacobian
     def compute_Jacobian(self, q):
-        pin.computeJointJacobians(self.model, self.data, q)
-        return pin.getFrameJacobian(self.model, self.data, self.EOAT_ID, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)[:3]
+        pin.computeJointJacobians(self.model, self.model_data, q)
+        return pin.getFrameJacobian(self.model, self.model_data, self.EOAT_ID, pin.ReferenceFrame.LOCAL_WORLD_ALIGNED)[:3]
 
 
     # Trajectory Planning for Point-to-Point(P2P) Motion
-    def P2P_Planner(self, joint_pos, goal_pos, interpolation='joint', track_EOAT=True):
+    def P2P_Planner(self, init_pos, goal_pos, interpolation='joint', track_EOAT=True):
         # Initiate Callers
-        q = joint_pos
+        q = init_pos
         y_target = goal_pos.copy()
         init_y = self.compute_ForwardKinematics(q)
+
         # Constants
         W = 1e-4 * np.eye(3)
+
         # Track EOAT
         if track_EOAT:
             EOAT = []
             EOAT.append(init_y)
+
         # HyperParams-> Needs to be tuned for large P2P Motion
         if interpolation=='joint':
             max_steps = 100
             smooth = 0.1
         if interpolation=='linear':
             max_steps = 1000
-            smooth = 0.9
+            smooth = 0.5
 
         for i in range(1, max_steps):
             y = self.compute_ForwardKinematics(q)
@@ -111,14 +110,19 @@ class Robot:
                 pass
             if interpolation=='linear':
                 y_target = init_y + (i/max_steps)*(goal_pos-y)
+
             # Compute Step Angle
             q += smooth * np.linalg.inv(J.T @ J + W) @ J.T @ (y_target - y)
+            #self.set_JointStates(q)
+
             self.viz.display(q)
             sleep(2e-3)
+
             if track_EOAT:
                 EOAT.append(y)
+
         if track_EOAT:
-            return q, EOAT
+            return q, np.vstack(EOAT)
         else:
             return q
     
@@ -134,7 +138,7 @@ class Robot:
             q, trace_points = self.P2P_Planner(q, point)
             EOAT.append(trace_points)
         if track_EOAT:
-            return np.concatenate(EOAT)
+            return np.vstack(EOAT)
 
     # Plot of EOAT Position 
     def plot_EOATPosition(self, trace_points, save=False):
@@ -144,15 +148,13 @@ class Robot:
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.xaxis.set_tick_params(labelsize=7)
-        ax.yaxis.set_tick_params(labelsize=7)
-        ax.zaxis.set_tick_params(labelsize=7)
+        plt.show()
         if save:
            plt.savefig('Trajectory_Plot.png') 
 
 
     ####################################################################################################################
-    # COLLISIONS COMPUTATIONS                                                                             ##############
+    # COLLISIONS COMPUTATION                                                                              ##############
     ####################################################################################################################
     # Definition to Compute Collisions
     def compute_Collisions(self,q):
@@ -166,34 +168,59 @@ class Robot:
     ####################################################################################################################
     # JOINT DYNAMICS                                                                                      ##############
     ####################################################################################################################
-    # Definition to Compute Collisions
+    # Definition to Set Joint Torques using dynamics
     def set_JointStates(self, target_q):
         tau = .01
-        N = 10
+        N = 5
         T = N*tau
 
         # Goal Set Points
         q_goal = target_q
         v_goal = np.zeros(3)
-        a_goal = np.zeros(3)
 
         # Init. Values
         q, v = self.device.get_state()
 
+        # Joint Dynamics Defaults
+        self.Kp = 1.5
+        self.Kd = 0.15
+        self.Ki = 0.5
+
+        # One Step Set
+        pos_err = q_goal - q
+        while np.linalg.norm(pos_err) >= 0.1:
+            u = self.Kp * pos_err
+            self.device.send_joint_torque(u)
+            q, v = self.device.get_state()
+            pos_err = q_goal - q
+            self.viz.display(q)
+            sleep(1)
+
+
+        """
         # For the Ki Tuning
-        Err_list=[]
+        Err_log=[]
+        Err_log.append(q_goal - q)
         
-        for i in range(N):
+        for i in range(1, N+1):
             t = i * tau
             
-            q =  q_goal - (q*t)/N
-            v =  v_goal - (v*t)/N
+            # Compute Step Angles
+            q =  q_goal - (q*t)/T
+            v =  v_goal - (v*t)/T
 
-            # d) PID controller
-            u = self.Kp*(q_goal - q) + self.Kd*(v_goal - v) + self.Ki* np.sum(Err_list)
+            # PID controller
+            u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) #+ self.Kd*(v_goal - v) 
 
-            Err_list.append(q_goal - q)
-            sleep(tau)
+            # Send torque commands
+            self.device.send_joint_torque(u)
+            print (q_goal, q)
+
+            q, v = self.device.get_state()
+            self.viz.display(q)
+
+            Err_log.append(q_goal - q)
+            sleep(tau)"""
 
     
 #######################################################################################################################
@@ -202,10 +229,4 @@ class Robot:
 if __name__ == "__main__":
     robot = Robot(NYUFingerReal(), 'enp5s0')
 
-
-    target, _ = robot.device.get_state()
-    robot.viz.display(target)
-    #robot.set_JointStates(target)
-    tau = pin.rnea(robot.model, robot.model_data, np.zeros(3),np.ones(3),np.zeros(3))
-    print (tau)
-    robot.device.send_joint_torque(tau)
+    robot.set_JointStates(np.zeros(3))
