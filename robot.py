@@ -20,8 +20,9 @@ import matplotlib.pyplot as plt
 plt.style.use('dark_background')
 
 import os
-import copy
+from threading import Thread
 from time import sleep
+
 
 
 #######################################################################################################################
@@ -65,12 +66,12 @@ class Robot:
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
         # Get the FrameID of the Base
-        self.Base_ID = self.model.getFrameID('base_link')
+        self.Base_ID = self.model.getFrameId('base_link')
         
         # Enable Dynamic Compensation
         q, v = self.device.get_state()
-        self.set_DynamicCompensation(True, q, v, np.zeros(3))
-
+        self.SetDynamicCompensation = Thread(target=self.set_DynamicCompensation, args=(True, q, v, np.zeros(3)))
+        self.SetDynamicCompensation.start()
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
@@ -179,6 +180,9 @@ class Robot:
     ####################################################################################################################
     # Definition to Set Joint Torques using dynamics
     def set_JointStates(self, target_q):
+        # Disable Dynamic Compensation
+        self.SetDynamicCompensation.join()
+        
         tau = .01
         N = 5
         T = N*tau
@@ -199,11 +203,10 @@ class Robot:
         # For the Ki Tuning
         Err_log=[]
         Err_log.append(q_goal - q)
+
+        print ('XYZ')
         
         for i in range(1, N+1):
-            # Disable Dynamic Compensation
-            self.set_DynamicCompensation(False, q_goal, v_goal, a_goal)
-            
             t = i * tau
             
             # Compute Step Angles
@@ -225,7 +228,7 @@ class Robot:
             sleep(tau)
             
         # Restart Dynamic Compensation
-        self.set_DynamicCompensation(True, q_goal, v_goal, a_goal)
+        self.SetDynamicCompensation.start()
 
 
     ####################################################################################################################
@@ -235,7 +238,7 @@ class Robot:
     def set_DynamicCompensation(self, enable, set_state, set_velocity, set_acc):
         while(enable):
             # Computing Inverse Dynamics for stall torque
-            tau = pin.rnea(robot.model, robot.model_data, set_state, set_velocity, set_acc)
+            tau = pin.rnea(self.model, self.model_data, set_state, set_velocity, set_acc)
             self.device.send_joint_torque(tau)
   
 
@@ -245,5 +248,5 @@ class Robot:
 #######################################################################################################################
 if __name__ == "__main__":
     robot = Robot(NYUFingerReal(), 'enp5s0')
-
+    print ('Kanishk')
     robot.set_JointStates(np.zeros(3))
