@@ -7,8 +7,10 @@ This repository implements Kinematics & Dynamics Solver for the robot 'nyu_finge
 ## Description
 1. Rendering of the model in Meshcatviwer,
     <p align="left"><img src="pictures/snap_viewer.png" width="300"></p>
-1. Plotting Trajectories,
+2. Plotting Trajectories,
     <p align="left"><img src="pictures/trajectory_viewer.png" width="300"></p>
+3. Testing of Inverse Dynamic Compensation,
+    <p align="left"><img src="pictures/Inverse Dynamics.gif" width="300"></p>
 
 
 ## Dependencies
@@ -21,3 +23,4 @@ pip3 install -r requirements.txt
 ## Contact
 * email: navalekanishk@gmail.com
 * phone: +49 176 5783 1504
+* website: https://kanishknavale.github.io/
