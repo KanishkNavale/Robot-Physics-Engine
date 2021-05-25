@@ -7,6 +7,7 @@
 ######################################################################################################################
 
 # Library Imports
+import threading
 from numpy.lib.npyio import save
 from nyu_finger import NYUFingerReal
 
@@ -70,7 +71,9 @@ class Robot:
         
         # Enable Dynamic Compensation
         q, v = self.device.get_state()
-        self.SetDynamicCompensation = Thread(target=self.set_DynamicCompensation, args=(True, q, v, np.zeros(3)))
+        self.SetDynamicCompensation = Thread(target=self.DynamicCompensation, args=(q, v, np.zeros(3)))
+        self.SDC_Flag = threading.Event()
+        self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
 
     ####################################################################################################################
@@ -181,7 +184,10 @@ class Robot:
     # Definition to Set Joint Torques using dynamics
     def set_JointStates(self, target_q):
         # Disable Dynamic Compensation
-        self.SetDynamicCompensation.join()
+        if self.SetDynamicCompensation.is_alive():
+            print ('Terminating Dynamic Compensation!')
+            self.SDC_Flag.set()
+            self.SetDynamicCompensation.join()
         
         tau = .01
         N = 5
@@ -194,6 +200,7 @@ class Robot:
 
         # Init. Values
         q, v = self.device.get_state()
+        a = a_goal.copy()
 
         # Joint Dynamics Defaults
         self.Kp = 1.5
@@ -203,8 +210,6 @@ class Robot:
         # For the Ki Tuning
         Err_log=[]
         Err_log.append(q_goal - q)
-
-        print ('XYZ')
         
         for i in range(1, N+1):
             t = i * tau
@@ -217,8 +222,11 @@ class Robot:
             # PID controller
             u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) + self.Kd*(v_goal - v) 
 
+            # Compute Other Inverse Dynamics Compensations
+            cu = pin.rnea(self.model, self.model_data, q, v, a)
+
             # Send torque commands
-            self.device.send_joint_torque(u)
+            self.device.send_joint_torque(u + cu)
             print (q_goal, q)
 
             q, v = self.device.get_state()
@@ -228,15 +236,19 @@ class Robot:
             sleep(tau)
             
         # Restart Dynamic Compensation
+        print ('Restarting Dynamic Compensation')
+        self.SetDynamicCompensation = Thread(target=self.DynamicCompensation, args=(q, v, np.zeros(3)))
+        self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
 
 
     ####################################################################################################################
-    # GRAVITY COMPENSATION + Other Inverse Dynamics Compensations                                          ##############
+    # GRAVITY COMPENSATION + Other Inverse Dynamics Compensations                                         ##############
     ####################################################################################################################
     # Definition to compute Inverse Dynamics Gravity + Inertia + NLE Forces + Centrifugal & Corrolis 
-    def set_DynamicCompensation(self, enable, set_state, set_velocity, set_acc):
-        while(enable):
+    def DynamicCompensation(self, set_state, set_velocity, set_acc):
+        print ('Setting in Dynamic Compensation!')
+        while not self.SDC_Flag.is_set():
             # Computing Inverse Dynamics for stall torque
             tau = pin.rnea(self.model, self.model_data, set_state, set_velocity, set_acc)
             self.device.send_joint_torque(tau)
@@ -248,5 +260,5 @@ class Robot:
 #######################################################################################################################
 if __name__ == "__main__":
     robot = Robot(NYUFingerReal(), 'enp5s0')
-    print ('Kanishk')
-    robot.set_JointStates(np.zeros(3))
+    #print(robot.device.get_state())
+    #robot.set_JointStates(np.zeros(3))

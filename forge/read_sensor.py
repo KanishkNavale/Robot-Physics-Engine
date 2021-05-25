@@ -36,7 +36,7 @@ class ReadLine:
                 self.buf.extend(data)
 
 # Init. the serial port 
-ser = serial.Serial('/dev/ttyACM2',115200)
+ser = serial.Serial('/dev/ttyACM6',115200)
 dataframe = ReadLine(ser)
 
 
@@ -51,48 +51,30 @@ except Exception:
 # Loose the first reading
 data = dataframe.readline()
 
-while True:
-    data = dataframe.readline()
-    data =  str(data)
-    print()
-    sleep(1)
-"""
-# Read the readings 
-x1 = deque(maxlen=50)
-x2 = deque(maxlen=50)
-x3 = deque(maxlen=50)
-x4 = deque(maxlen=50)
-x5 = deque(maxlen=50)
-x6 = deque(maxlen=50)
-x7 = deque(maxlen=50)
-x8 = deque(maxlen=50)
+# List of Readings
+channels = [0]#,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
 
+# Read the readings 
+ranges = [deque(maxlen=100) for i in range(36)]
 
 def read_sensor(i):
-    try:
-        data = dataframe.readline()
-        data =  str(data)
+    data = dataframe.readline()
+    data =  str(data)
+    data = data[12:-5].split()
+    
+    if len(data)== 36:
+        print (data)
+        for i,point in enumerate(data):
+            ranges[i].append(int(point, 16))
         
-        data = data[12:52].split()
-        x1 = int(data[0], 16)
-        x2 = int(data[1], 16)
-        x3 = int(data[2], 16)
-        x4 = int(data[3], 16)
-        x5 = int(data[4], 16)
-        x6 = int(data[5], 16)
-        x7 = int(data[6], 16)
-        x8 = int(data[7], 16)
-        matrix = np.matrix([x2, x1],[x4, x3],[x6, x5],[x8 ,x7])
         ax.clear()
-        ax.imshow(matrix, aspect= 'auto')
-        #ax.grid(True)
+        for i in channels:
+            ax.plot(ranges[i], label=str(i))
+        ax.grid(True)
+        ax.legend(loc='center left')
 
-    except:
-        print (Exception)
+    else:
+        pass
 
 ani = animation.FuncAnimation(fig, read_sensor, interval=1)
 plt.show()
-"""
-
-
-
