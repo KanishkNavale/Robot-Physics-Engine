@@ -205,7 +205,7 @@ class Robot:
         # Joint Dynamics Defaults
         self.Kp = 1.5
         self.Kd = 0.15
-        self.Ki = 1e-4
+        self.Ki = 1e-6
 
         # For the Ki Tuning
         Err_log=[]
@@ -215,10 +215,10 @@ class Robot:
             t = i * tau
             
             # Compute Step Angles
-            q = q_goal - (q*t)/T
-            v = v_goal - (v*t)/T
-            a = a_goal - (a*t)/T
-
+            q += (t/T) * (q_goal - q)
+            v += (t/T) * (v_goal - v)
+            a += (t/T) * (a_goal - a)
+            
             # PID controller
             u = self.Kp*(q_goal - q) + self.Ki* np.sum(Err_log) + self.Kd*(v_goal - v) 
 
