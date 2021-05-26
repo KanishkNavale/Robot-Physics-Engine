@@ -100,7 +100,6 @@ class Robot:
             self.readings = [deque(maxlen=100) for i in range(self.channels[-1])]
             self.fig = plt.figure()
             self.ax = self.fig.add_subplot(1,1,1)
-            self.fig.show()
             self.plot_readings = Thread(target=self.read_sensor)
             self.plot_readings.start()
         except Exception as e:
@@ -148,19 +147,17 @@ class Robot:
             data = self.dataframe.readline()
             data =  str(data)
             data = data[12:-5].split()
-            print (data)
+            
             if len(data)== 36:
-
                 self.ax.clear()
 
                 for i in self.channels:
                     self.readings[i].append(int(data[i], 16))
-                    self.ax.plot(self.readings[i], label=str(i))
+                    plt.plot(list(self.readings[i]), label=str(i))
+                    
                 self.ax.grid(True)
                 self.ax.legend(loc='center left')
                 self.fig.canvas.draw()
-
-            sleep(0.1)
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
@@ -354,5 +351,5 @@ class Robot:
 if __name__ == "__main__":
     robot = Robot(NYUFingerReal(), 'enp5s0')
     #robot.set_JointStates(np.array([0, 0, np.pi/4]))
-    plt.close()
+    plt.show()
         
