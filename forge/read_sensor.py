@@ -36,7 +36,7 @@ class ReadLine:
                 self.buf.extend(data)
 
 # Init. the serial port 
-ser = serial.Serial('/dev/ttyACM6',115200)
+ser = serial.Serial('/dev/ttyACM0',115200)
 dataframe = ReadLine(ser)
 
 
@@ -52,7 +52,7 @@ except Exception:
 data = dataframe.readline()
 
 # List of Readings
-channels = [0]#,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
+channels = [0,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
 
 # Read the readings 
 ranges = [deque(maxlen=100) for i in range(36)]
@@ -76,5 +76,5 @@ def read_sensor(i):
     else:
         pass
 
-ani = animation.FuncAnimation(fig, read_sensor, interval=1)
+ani = animation.FuncAnimation(fig, read_sensor, interval=0.1)
 plt.show()
