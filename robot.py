@@ -8,7 +8,6 @@
 
 # Library Imports
 import threading
-from numpy.lib.npyio import save
 from nyu_finger import NYUFingerReal
 
 import pinocchio as pin
@@ -92,18 +91,25 @@ class Robot:
         try: 
             self.sensor_port = serial.Serial('/dev/ttyACM0',115200)
             self.dataframe = self.ReadLine(self.sensor_port)
+        except Exception as e:
+            print (f'Sensor Error: {e}')
+        
+        try:       
             self.sensor_port.close()
             self.sensor_port.open()
-            # Discard firstline of the reading
+            
+            # Discard firstline of the reading and discard it!
             self.dataframe.readline()
             self.channels = [0,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
             self.readings = [deque(maxlen=100) for i in range(self.channels[-1])]
+            
             self.fig = plt.figure()
             self.ax = self.fig.add_subplot(1,1,1)
             self.plot_readings = Thread(target=self.read_sensor)
             self.plot_readings.start()
         except Exception as e:
-            print (f'Sensor Error Exception: {e}')
+            print (f'Sensor Error: {e}')  
+            
 
     ####################################################################################################################
     # Refresh Display                                                                                     ##############
