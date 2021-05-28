@@ -35,15 +35,13 @@ class NYUFingerSimulator:
         # Load the finger robot
         robotStartPos = [0.,0,.0]
         robotStartOrientation = p.getQuaternionFromEuler([0,0,0])
+        package_dir = os.path.abspath(os.getcwd())
+        urdf_path = package_dir + '/model/fingeredu.urdf'
 
-        urdf_path = '../urdf/fingeredu.urdf'
-
-        self.robotId = p.loadURDF(urdf_path, robotStartPos,
-                robotStartOrientation, flags=p.URDF_USE_INERTIA_FROM_FILE,
-                useFixedBase=True)
+        self.robotId = p.loadURDF(urdf_path, robotStartPos,robotStartOrientation, flags=p.URDF_USE_INERTIA_FROM_FILE,useFixedBase=True)
         
         # Create pinocchio robot
-        self.pin_robot = RobotWrapper.BuildFromURDF(urdf_path, [os.path.abspath('../urdf/')])
+        self.pin_robot = RobotWrapper.BuildFromURDF(urdf_path, package_dir)
         
         # Create a wrapper between the pinocchio and pybullet robot.
         joint_names = [
