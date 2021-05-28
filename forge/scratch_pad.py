@@ -120,10 +120,10 @@ class Agent:
         self.memory.store_transition(state, action, reward, new_state, done)
         
     def save_models(self):
-        self.actor.save_weights(self.actor.checkpoint)
-        self.critic.save_weights(self.critic.checkpoint)
-        self.target_actor.save_weights(self.target_actor.checkpoint)
-        self.target_critic.save_weights(self.target_critic.checkpoint)
+        self.actor.save_weights('forge/data/DeepRL/TauPredictionHER/'+self.actor.checkpoint)
+        #self.critic.save_weights('forge/data/DeepRL/TauPredictionHER'+self.critic.checkpoint)
+        #self.target_actor.save_weights(self.target_actor.checkpoint)
+        #self.target_critic.save_weights(self.target_critic.checkpoint)
         
     def load_models(self):
         self.actor.load_weights(self.actor.checkpoint)
@@ -180,7 +180,9 @@ if __name__ == "__main__":
     agent = Agent(input_dims=6, n_actions=3)
     best_score = -np.inf
 
-    n_games = 1000
+    n_games = 5000
+    score_history = []
+    AvgScore_history = []
     
     for i in range(n_games):
         done = False
@@ -191,26 +193,46 @@ if __name__ == "__main__":
 
         target_q = np.random.uniform(np.pi/2, -np.pi/2, (3,))
         
-        for j in range(250):
+        for j in range(5000):
             q, _ = robot.get_state()
             
             tau = agent.choose_action(np.hstack((q,target_q))).numpy()
             
-            robot.send_joint_torque(tau.T)
+            robot.send_joint_torque(tau)
             robot.step()
             
             next_q, _ = robot.get_state()
             
-            reward = - tf.math.reduce_mean(tf.math.abs(target_q - next_q)).numpy()
+            done = np.array_equal(next_q, target_q)
+            
+            if done:
+                reward = 1
+            else:
+                reward = -1
+            
             score += reward
             
-            if reward ==  0.0:
-                done = True
-                break
-            
-            #print (target_q, q, next_q, error, reward, done)
+    
+            # Add Normal Experience to Replay Buffer
             agent.recall(np.hstack((q,target_q)), tau, reward, np.hstack((next_q,target_q)), done)
+            
+            # Add 'Hindsight' Experience to memory
+            agent.recall(np.hstack((q, next_q)), tau, 1, np.hstack((next_q, next_q)), True)
             agent.learn()
+            
+            if done:
+                break
+        
+        # Log the scores
+        score_history.append(score)
+        avg_score = np.mean(score_history[-100:])
+        AvgScore_history.append(avg_score)
+        
+        np.save('forge/data/DeepRL/TauPredictionHER/score_history', score_history, allow_pickle=False)
+        np.save('forge/data/DeepRL/TauPredictionHER/avg_history', AvgScore_history, allow_pickle=False)
+        
+        if avg_score > best_score:
+            best_score = avg_score
+            agent.save_models()
 
-        print(f'Episode: {i} \t Sum. Episodic Reward: {score:.4f}')  
-
+        print(f'Episode: {i} \t Sum. Episodic Reward: {score:.4f}') 
