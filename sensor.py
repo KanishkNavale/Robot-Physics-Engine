@@ -42,7 +42,8 @@ class HapticSensor:
         self.plot = Thread(target=self.plotter)
         self.plot.start()
         
-    def open_port(self):
+    def open_port(self) -> None:
+        """ Opens the Specified Port. If fails, tries & opens allied sensor ports"""
         # Open the port
         for i in range(10):
             print (f'Trying to open Port {self.port}')
@@ -62,7 +63,8 @@ class HapticSensor:
                     sys.exit(0)
                 continue
                               
-    def read_buffer(self):
+    def read_buffer(self) -> bytearray:
+        """ Reads one bytearray from the port """
         i = self.buffer.find(b"\n")
         if i >= 0:
             r = self.buffer[:i+1]
@@ -79,22 +81,24 @@ class HapticSensor:
             else:
                 self.buffer.extend(data)
 
-    def data_formatted(self):
-            data = self.read_buffer()
-            data =  str(data)
-            data = np.array(data[12:-5].split())
-            try:
-                data = data[self.channels]
-                for i in range(len(data)):
-                    data[i]= int(data[i],16)
-                if type(data) is np.ndarray:
-                    return data
-                else:
-                    raise Exception
-            except:
-                self.data_formatted()
+    def data_formatted(self) -> np.ndarray:
+        """ Extracts required data from the bytearray & returns decimal array"""
+        data = self.read_buffer()
+        data =  str(data)
+        data = np.array(data[12:-5].split())
+        try:
+            data = data[self.channels]
+            for i in range(len(data)):
+                data[i]= int(data[i],16)
+            if type(data) is np.ndarray:
+                return data
+            else:
+                raise Exception
+        except:
+            self.data_formatted()
             
-    def plotter(self):
+    def plotter(self) -> None:
+        """ Writes the array into memory & Plots it"""
         while(True):
             data = self.data_formatted()
             self.ax.clear()
