@@ -21,24 +21,8 @@ class HapticSensor:
         # Init. variables for readingline
         self.buffer = bytearray()
 
-        # Open the port
-        for i in range(10):
-            print (f'Trying to open Port {self.port}')
-            try:
-                # Init. Sensor
-                self.sensor = serial.Serial(self.port, self.baudrate)
-                self.sensor.close()
-                self.sensor.open()
-                print (f'Successfully Opened Port: {self.port}')
-                break
-            except Exception as e:
-                print (f'Port Opening Error')
-                self.port = self.port[:-1]+str(int(self.port[-1])+1)
-                print (f'Attempt to open Port: {self.port}')
-                if i==9:
-                    print ('Sensor Port Search and Init. Failed')
-                    sys.exit(0)
-                continue
+        # Open Ports
+        self.open_port()
 
         # List of Readings
         self.channels = [0,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
@@ -58,7 +42,26 @@ class HapticSensor:
         self.plot = Thread(target=self.plotter)
         self.plot.start()
         
-                    
+    def open_port(self):
+        # Open the port
+        for i in range(10):
+            print (f'Trying to open Port {self.port}')
+            try:
+                # Init. Sensor
+                self.sensor = serial.Serial(self.port, self.baudrate)
+                self.sensor.close()
+                self.sensor.open()
+                print (f'Successfully Opened Port: {self.port}\n')
+                break
+            except Exception as e:
+                print (f'Port Opening Error')
+                self.port = self.port[:-1]+str(int(self.port[-1])+1)
+                print (f'Attempt to open Port: {self.port}\n')
+                if i==9:
+                    print ('*** Sensor Port Search and Init. Failed ***')
+                    sys.exit(0)
+                continue
+                              
     def read_buffer(self):
         i = self.buffer.find(b"\n")
         if i >= 0:
@@ -117,7 +120,7 @@ class HapticSensor:
                     self.ax.set_yticks(np.arange(-0.5, data.shape[0], 1), minor=False)
                     self.ax.set_xticklabels([])
                     self.ax.set_yticklabels([])
-                    self.ax.grid(which='major', color='w', linestyle='-', linewidth=5)
+                    self.ax.grid(which='major', color='b', linestyle='-', linewidth=3)
 
             self.fig.canvas.draw()
                 
