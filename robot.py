@@ -8,6 +8,7 @@
 
 # Library Imports
 import threading
+
 from nyu_finger import NYUFingerReal
 
 import pinocchio as pin
@@ -23,9 +24,11 @@ import matplotlib.animation as animation
 import os
 from threading import Thread
 from time import sleep
-
+import sys
 import serial
 from collections import deque
+import atexit
+import gc
 
 #######################################################################################################################
 # Class Construct of the robot                                                                            #############
@@ -87,30 +90,6 @@ class Robot:
         self.update_viz = Thread(target=self.refresh_viz)
         self.update_viz.start()
 
-        # Init. the Haptic Sensor
-        try: 
-            self.sensor_port = serial.Serial('/dev/ttyACM0',115200)
-            self.dataframe = self.ReadLine(self.sensor_port)
-        except Exception as e:
-            print (f'Sensor Error: {e}')
-        
-        try:       
-            self.sensor_port.close()
-            self.sensor_port.open()
-            
-            # Discard firstline of the reading and discard it!
-            self.dataframe.readline()
-            self.channels = [0,1,2,3,6,7,8,9,12,13,14,15,18,19,20,21]
-            self.readings = [deque(maxlen=100) for i in range(self.channels[-1])]
-            
-            self.fig = plt.figure()
-            self.ax = self.fig.add_subplot(1,1,1)
-            self.plot_readings = Thread(target=self.read_sensor)
-            self.plot_readings.start()
-        except Exception as e:
-            print (f'Sensor Error: {e}')  
-            
-
     ####################################################################################################################
     # Refresh Display                                                                                     ##############
     ####################################################################################################################
@@ -121,49 +100,6 @@ class Robot:
             self.viz.display(q)
             sleep(1/refresh_rate)
 
-    ####################################################################################################################
-    # Read Haptic Sensor                                                                                  ##############
-    ####################################################################################################################
-    # Class to a extract bytearray
-    class ReadLine:
-        def __init__(self, s):
-            self.buf = bytearray()
-            self.s = s
-
-        def readline(self):
-            i = self.buf.find(b"\n")
-            if i >= 0:
-                r = self.buf[:i+1]
-                self.buf = self.buf[i+1:]
-                return r
-            while True:
-                i = max(1, min(2048, self.s.in_waiting))
-                data = self.s.read(i)
-                i = data.find(b"\n")
-                if i >= 0:
-                    r = self.buf + data[:i+1]
-                    self.buf[0:] = data[i+1:]
-                    return r
-                else:
-                    self.buf.extend(data)
-
-    # Definition to add extract data from bytearray
-    def read_sensor(self):
-        while True:
-            data = self.dataframe.readline()
-            data =  str(data)
-            data = data[12:-5].split()
-            
-            if len(data)== 36:
-                self.ax.clear()
-
-                for i in self.channels:
-                    self.readings[i].append(int(data[i], 16))
-                    plt.plot(list(self.readings[i]), label=str(i))
-                    
-                self.ax.grid(True)
-                self.ax.legend(loc='center left')
-                self.fig.canvas.draw()
 
     ####################################################################################################################
     # KINEMATICS                                                                                          ##############
@@ -204,10 +140,10 @@ class Robot:
 
         # HyperParams-> Needs to be tuned for large P2P Motion
         if interpolation=='joint':
-            max_steps = 100
-            smooth = 0.1
+            max_steps = 50
+            smooth = 0.5
         if interpolation=='linear':
-            max_steps = 1000
+            max_steps = 100
             smooth = 0.75
 
         for i in range(1, max_steps):
@@ -277,65 +213,66 @@ class Robot:
     # Definition to Set Joint Torques using dynamics
     def set_JointStates(self, target_q):
         # Disable Dynamic Compensation
-        if self.SetDynamicCompensation.is_alive():
-            print ('Terminating Dynamic Compensation!')
-            self.SDC_Flag.set()
-            self.SetDynamicCompensation.join()
-        
-        tau = 0.01
-        N = 100
-        T = N*tau
+        print ('Terminating Dynamic Compensation!')
+        self.SDC_Flag.set()
+        self.SetDynamicCompensation.join()
+
+        # Chart for tuning
+        q_log = []
 
         # Goal Set Points
         q_goal = target_q
-        v_goal = np.zeros(3)
-        a_goal = np.zeros(3)
 
         # Init. Values
         q, v = self.calibrated_states()
-        a = a_goal.copy()
 
-        # Joint Dynamics Defaults
-        self.Kp = 1
-        self.Kd = 2 * np.sqrt(self.Kp)
-        self.Ki = 1e-10
+        # Joint Position Dynamics Defaults
+        self.Kp = np.array([1,        3,        1.35])
+        self.Kd = np.array([0.01,        0.09,     0.1])
+        self.Ki = np.array([8e-4,     8e-4,    3.5e-4])
 
-        # For the Ki Tuning
-        Err_log=[]
-        Err_log.append(q_goal - q)
-        
-        for i in range(1, N+1):
-            t = i * tau
+        # Error Inits.
+        pre_err = np.zeros(3)
+        int_err = np.zeros(3)
+
+        for i in range(1000):
+
+            # Compute Positional Errors
+            pro_err  = q_goal - q
+            der_err  = pre_err - pro_err
+            int_err += pro_err
+            pre_err = pro_err
+
+            # Positional controller
+            u  = self.Kp* pro_err
+            u += self.Ki* int_err
+            u += self.Kd* der_err
+            #u = np.clip(u, -0.75, 0.75)
             
-            # Compute Step Angles
-            q += (t/T) * (q_goal - q)
-            v += (t/T) * (v_goal - v)
-            a += (t/T) * (a_goal - a)
-            
-            # PID controller
-            u  = self.Kp*(q_goal - q)
-            u += self.Ki* np.sum(Err_log) 
-            u += self.Kd*(v_goal - v) 
-
-            # Compute Gravity Compensation
-            gu = pin.computeGeneralizedGravity(self.model, self.model_data, q)
-
             # Send torque commands
-            self.device.send_joint_torque(u + gu)
+            self.device.send_joint_torque(u)
 
             q, v = self.calibrated_states()
             self.set_pos = q
-            self.set_vel = v
-            print (q_goal, q)
 
-            Err_log.append(q_goal - q)
-            sleep(tau)
+            q_log.append(q)
+            
+            sleep(0.8e-3)
+
+            print (f'Iteration: {i} \t Target Position: {np.rad2deg(q_goal)} \t Current Position: {np.rad2deg(q)}')
             
         # Restart Dynamic Compensation
         print ('Restarting Dynamic Compensation')
         self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
         self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
+        """
+        plt.plot(np.rad2deg(q_log), label='q')
+        plt.plot([np.rad2deg(q_goal) for _ in range(len(q_log))], label='q_goal')
+            
+        plt.grid(True)
+        plt.legend(loc='best')
+        plt.show()"""
 
 
     ####################################################################################################################
@@ -346,16 +283,17 @@ class Robot:
         print ('Setting in Dynamic Compensation!')
         while not self.SDC_Flag.is_set():
             # Computing Inverse Dynamics for hold torque
-            gu = pin.computeGeneralizedGravity(self.model, self.model_data, self.set_pos)
+            #gu = pin.computeGeneralizedGravity(self.model, self.model_data, self.set_pos)
             tau = pin.rnea(self.model, self.model_data, self.set_pos, self.set_vel, np.zeros(3))
             self.device.send_joint_torque(tau)
   
- 
+
 #######################################################################################################################
 # MAIN Runtime                                                                                           ##############
 #######################################################################################################################
 if __name__ == "__main__":
-    robot = Robot(NYUFingerReal(), 'enp5s0')
-    #robot.set_JointStates(np.array([0, 0, np.pi/4]))
-    plt.show()
+    robot  = Robot(NYUFingerReal(), 'enp5s0')
+    
+
+
         

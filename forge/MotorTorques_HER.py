@@ -1,7 +1,6 @@
 from os import error
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.types import internal
 from robot_simulator import NYUFingerSimulator
 import pinocchio as pin
 from time import sleep
@@ -193,7 +192,7 @@ if __name__ == "__main__":
 
         target_q = np.random.uniform(np.pi/2, -np.pi/2, (3,))
         
-        for j in range(5000):
+        for j in range(500):
             q, _ = robot.get_state()
             
             tau = agent.choose_action(np.hstack((q,target_q))).numpy()
