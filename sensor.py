@@ -1,3 +1,11 @@
+######################################################################################################################
+# DEVELOPED BY KANISHK                                                                                   #############
+# MAX PLANCK INSTITUTE FOR INTELLIGENT SYSTEMS                                                           #############
+# STUTTGART, GERMANY                                                                                     #############
+                                                                                                         #############
+# THIS SCRIPT CONSTRUCTS A ROBOT CLASS BASED ON FUNCTIONALITIES FROM THE 'FORGE'                         #############
+######################################################################################################################
+
 # Library Imports
 from os import minor
 import serial

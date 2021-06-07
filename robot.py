@@ -7,28 +7,32 @@
 ######################################################################################################################
 
 # Library Imports
-import threading
 
+# Imports for System Handlers
+import sys
+import os
+from threading import Thread, Event
+from time import sleep, time
+
+# For using 'Forge' Functionalities
+sys.path.append('forge')
+from forge.robot_simulator import NYUFingerSimulator
+
+# Using OpenRobotics Scripts
 from nyu_finger import NYUFingerReal
-
 import pinocchio as pin
-from pinocchio.visualize import GepettoVisualizer
 
+# For Manipulating Tensors
 import numpy as np
 np.set_printoptions(precision=4, suppress=True)
 
+# For Plotting Purposes
 import matplotlib.pyplot as plt
 plt.style.use('dark_background')
-import matplotlib.animation as animation
 
-import os
-from threading import Thread
-from time import sleep
-import sys
-import serial
-from collections import deque
-import atexit
-import gc
+# For Controllers
+import pygame
+ 
 
 #######################################################################################################################
 # Class Construct of the robot                                                                            #############
@@ -38,11 +42,11 @@ class Robot:
 
     def __init__(self, device, comms):
         # Init. Hardware
-        self.device = device
         try:
+            self.device = device
             self.device.initialize(comms)
-        except:
-            print('Something Went Wrong!')
+        except Exception as e:
+            print('Robot Hardware Initiation Error: {e}')
 
         # Init. Simulation Env. using .urdf file
         # Load the .urdf files
@@ -59,12 +63,9 @@ class Robot:
         self.collision_data = pin.GeometryData(self.collision_model)
 
         # Display the models in viewer
-        self.viz = GepettoVisualizer(self.model, self.collision_model, self.visual_model)
-        self.viz.initViewer()
-        self.viz.loadViewerModel("nyu_finger")
-        self.viz.displayCollisions(True)
-        self.viz.displayVisuals(True)
-
+        """ Using the Simulator to display the model """
+        self.simulator = NYUFingerSimulator(self.package_dir, self.urdf_path)
+            
         # Get the FrameID of the EOAT
         self.EOAT_ID = self.model.getFrameId('finger_tip_link')
         # Get the FrameID of the Base
@@ -82,13 +83,20 @@ class Robot:
         
         # Enable Dynamic Compensation
         self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
-        self.SDC_Flag = threading.Event()
+        self.SDC_Flag = Event()
         self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
 
         # Refresh Display
-        self.update_viz = Thread(target=self.refresh_viz)
-        self.update_viz.start()
+        self.update_simulator = Thread(target=self.refresh_viz)
+        self.update_simulator.start()
+
+        # Use Keyboard as a controller
+        pygame.init()
+        pygame.display.set_mode()
+        self.controller = Thread(target=self.keyboard_listener)
+        self.controller.start()
+
 
     ####################################################################################################################
     # Refresh Display                                                                                     ##############
@@ -96,9 +104,31 @@ class Robot:
     def refresh_viz(self):
         refresh_rate = 60 #(60FPS)
         while True:
-            q, _ = self.calibrated_states()
-            self.viz.display(q)
+            q, v = self.calibrated_states()
+            self.simulator.reset_state(q, v)
             sleep(1/refresh_rate)
+
+
+    ####################################################################################################################
+    # Keyboard Listener                                                                                   ##############
+    ####################################################################################################################
+    def keyboard_listener(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.K_8:
+                    print('+X')
+                if event.type == pygame.K_2:
+                    print('-X')
+                if event.type == pygame.K_4:
+                    print('+Y')
+                if event.type == pygame.K_6:
+                    print('-Y')
+                if event.type == pygame.K_UP:
+                    print('+Z')
+                if event.type == pygame.K_DOWN:
+                    print('-Z')
+                print('sdfsfd')
+            sleep(0.5)
 
 
     ####################################################################################################################
@@ -140,7 +170,7 @@ class Robot:
 
         # HyperParams-> Needs to be tuned for large P2P Motion
         if interpolation=='joint':
-            max_steps = 50
+            max_steps = 10
             smooth = 0.5
         if interpolation=='linear':
             max_steps = 100
@@ -226,17 +256,19 @@ class Robot:
         # Init. Values
         q, v = self.calibrated_states()
 
+        
         # Joint Position Dynamics Defaults
         self.Kp = np.array([1,        3,        1.35])
-        self.Kd = np.array([0.01,        0.09,     0.1])
-        self.Ki = np.array([8e-4,     8e-4,    3.5e-4])
+        self.Kd = np.array([0.01,     0.09,     0.1])
+        self.Ki = np.array([8e-4,     8e-4,     3.5e-4])
 
         # Error Inits.
         pre_err = np.zeros(3)
         int_err = np.zeros(3)
 
-        for i in range(1000):
+        for i in range(500):
 
+            
             # Compute Positional Errors
             pro_err  = q_goal - q
             der_err  = pre_err - pro_err
@@ -247,17 +279,16 @@ class Robot:
             u  = self.Kp* pro_err
             u += self.Ki* int_err
             u += self.Kd* der_err
-            #u = np.clip(u, -0.75, 0.75)
-            
+
             # Send torque commands
             self.device.send_joint_torque(u)
 
             q, v = self.calibrated_states()
             self.set_pos = q
 
-            q_log.append(q)
-            
-            sleep(0.8e-3)
+            q_log.append(q[2])
+
+            sleep(0.5e-3)
 
             print (f'Iteration: {i} \t Target Position: {np.rad2deg(q_goal)} \t Current Position: {np.rad2deg(q)}')
             
@@ -266,9 +297,9 @@ class Robot:
         self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
         self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
+        
         """
-        plt.plot(np.rad2deg(q_log), label='q')
-        plt.plot([np.rad2deg(q_goal) for _ in range(len(q_log))], label='q_goal')
+        plt.plot(np.rad2deg(q_goal[2]- q_log), label='q')
             
         plt.grid(True)
         plt.legend(loc='best')
@@ -293,6 +324,9 @@ class Robot:
 #######################################################################################################################
 if __name__ == "__main__":
     robot  = Robot(NYUFingerReal(), 'enp5s0')
+    q, v = robot.calibrated_states()
+    while 1:
+        pass
     
 
 

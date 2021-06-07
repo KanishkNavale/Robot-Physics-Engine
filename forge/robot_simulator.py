@@ -19,7 +19,7 @@ import time
 import os.path
 
 class NYUFingerSimulator:
-    def __init__(self):
+    def __init__(self, package_dir, urdf_path):
         # Connet to pybullet and setup simulation parameters.
         p.connect(p.GUI)
         p.setGravity(0, 0, -9.81)
@@ -35,8 +35,8 @@ class NYUFingerSimulator:
         # Load the finger robot
         robotStartPos = [0.,0,.0]
         robotStartOrientation = p.getQuaternionFromEuler([0,0,0])
-        package_dir = os.path.abspath(os.getcwd())
-        urdf_path = package_dir + '/model/fingeredu.urdf'
+        #package_dir = os.path.abspath(os.getcwd())
+        #urdf_path = package_dir + '/model/fingeredu.urdf'
 
         self.robotId = p.loadURDF(urdf_path, robotStartPos,robotStartOrientation, flags=p.URDF_USE_INERTIA_FROM_FILE,useFixedBase=True)
         
