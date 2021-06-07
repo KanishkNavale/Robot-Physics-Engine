@@ -12,6 +12,7 @@
 import sys
 import os
 from threading import Thread, Event
+from multiprocessing import Process
 from time import sleep, time
 
 # For using 'Forge' Functionalities
@@ -93,7 +94,7 @@ class Robot:
 
         # Use Keyboard as a controller
         pygame.init()
-        pygame.display.set_mode()
+        pygame.display.set_mode((300, 300))
         self.controller = Thread(target=self.keyboard_listener)
         self.controller.start()
 
@@ -115,20 +116,19 @@ class Robot:
     def keyboard_listener(self):
         while True:
             for event in pygame.event.get():
-                if event.type == pygame.K_8:
-                    print('+X')
-                if event.type == pygame.K_2:
-                    print('-X')
-                if event.type == pygame.K_4:
-                    print('+Y')
-                if event.type == pygame.K_6:
-                    print('-Y')
-                if event.type == pygame.K_UP:
-                    print('+Z')
-                if event.type == pygame.K_DOWN:
-                    print('-Z')
-                print('sdfsfd')
-            sleep(0.5)
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_KP8:
+                        print('+Y')
+                    if event.key == pygame.K_KP2:
+                        print('-Y')
+                    if event.key == pygame.K_KP4:
+                        print('-X')
+                    if event.key == pygame.K_KP6:
+                        print('+X')
+                    if event.key == pygame.K_UP:
+                        print('+Z')
+                    if event.key == pygame.K_DOWN:
+                        print('-Z')
 
 
     ####################################################################################################################
@@ -325,8 +325,7 @@ class Robot:
 if __name__ == "__main__":
     robot  = Robot(NYUFingerReal(), 'enp5s0')
     q, v = robot.calibrated_states()
-    while 1:
-        pass
+    
     
 
 
