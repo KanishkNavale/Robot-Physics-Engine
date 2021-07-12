@@ -13,7 +13,7 @@ import sys
 import os
 from threading import Thread, Event
 from multiprocessing import Process
-from time import sleep, time
+from time import sleep, clock
 
 # For using 'Forge' Functionalities
 sys.path.append('forge')
@@ -47,7 +47,7 @@ class Robot:
             self.device = device
             self.device.initialize(comms)
         except Exception as e:
-            print('Robot Hardware Initiation Error: {e}')
+            print(f'Robot Hardware Initiation Error: {e}')
 
         # Init. Simulation Env. using .urdf file
         # Load the .urdf files
@@ -77,6 +77,9 @@ class Robot:
         self.joint_offsets = q
         self.vel_offsets = v
 
+        # Initial Position
+        self.pose = self.compute_ForwardKinematics(self.joint_offsets)
+
         # Variables for Dynamic Compensation
         q, v = self.calibrated_states()
         self.set_pos = q
@@ -95,8 +98,8 @@ class Robot:
         # Use Keyboard as a controller
         pygame.init()
         pygame.display.set_mode((300, 300))
-        self.controller = Thread(target=self.keyboard_listener)
-        self.controller.start()
+        #self.controller = Thread(target=self.keyboard_listener)
+        #self.controller.start()
 
 
     ####################################################################################################################
@@ -117,18 +120,30 @@ class Robot:
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_KP8:
-                        print('+Y')
-                    if event.key == pygame.K_KP2:
-                        print('-Y')
-                    if event.key == pygame.K_KP4:
-                        print('-X')
                     if event.key == pygame.K_KP6:
-                        print('+X')
+                        print (f'Moving Robot: Direction +Y')
+                        self.pose = self.pose + np.array([0, 0.005, 0])
+                        self.P2P_Planner(self.pose)
+                    if event.key == pygame.K_KP4:
+                        print (f'Moving Robot: Direction -Y')
+                        self.pose = self.pose + np.array([0, -0.005, 0])
+                        self.P2P_Planner(self.pose)
+                    if event.key == pygame.K_KP8:
+                        print (f'Moving Robot: Direction -X')
+                        self.pose = self.pose + np.array([-0.005, 0.0, 0])
+                        self.P2P_Planner(self.pose)
+                    if event.key == pygame.K_KP2:
+                        print (f'Moving Robot: Direction +X')
+                        self.pose = self.pose + np.array([0.005, 0.0, 0])
+                        self.P2P_Planner(self.pose)
                     if event.key == pygame.K_UP:
-                        print('+Z')
+                        print (f'Moving Robot: Direction +Z')
+                        self.pose = self.pose + np.array([0.0, 0.0, 0.005])
+                        self.P2P_Planner(self.pose)
                     if event.key == pygame.K_DOWN:
-                        print('-Z')
+                        print (f'Moving Robot: Direction -Z')
+                        self.pose = self.pose + np.array([0.0, 0.0, -0.005])
+                        self.P2P_Planner(self.pose)
 
 
     ####################################################################################################################
@@ -154,9 +169,9 @@ class Robot:
 
 
     # Trajectory Planning for Point-to-Point(P2P) Motion
-    def P2P_Planner(self, init_pos, goal_pos, interpolation='joint', track_EOAT=True):
+    def P2P_Planner(self, goal_pos, interpolation='linear'):
         # Initiate Callers
-        q = init_pos
+        q, v = self.calibrated_states()
         y_target = goal_pos.copy()
         init_y = self.compute_ForwardKinematics(q)
 
@@ -164,16 +179,15 @@ class Robot:
         W = 1e-4 * np.eye(3)
 
         # Track EOAT
-        if track_EOAT:
-            EOAT = []
-            EOAT.append(init_y)
+        EOAT = []
+        EOAT.append(init_y)
 
         # HyperParams-> Needs to be tuned for large P2P Motion
         if interpolation=='joint':
             max_steps = 10
             smooth = 0.5
         if interpolation=='linear':
-            max_steps = 100
+            max_steps = 10
             smooth = 0.75
 
         for i in range(1, max_steps):
@@ -188,27 +202,21 @@ class Robot:
             q += smooth * np.linalg.inv(J.T @ J + W) @ J.T @ (y_target - y)
             self.set_JointStates(q)
 
-            if track_EOAT:
-                EOAT.append(y)
+            EOAT.append(y)
 
-        if track_EOAT:
-            return q, np.vstack(EOAT)
-        else:
-            return q
+        return np.vstack(EOAT)
     
 
     # Point based Trajectory Planner
-    def Trajectory_Planner(self, joint_pos, Point_List, track_EOAT=True):
-        q = joint_pos
+    def Trajectory_Planner(self, Point_List):
         # Track EOAT
-        if track_EOAT:
-            EOAT = []
+        EOAT = []
         # Invoke P2P_Planner for each Point
         for i, point in enumerate(Point_List):
-            q, trace_points = self.P2P_Planner(q, point)
+            trace_points = self.P2P_Planner(point)
             EOAT.append(trace_points)
-        if track_EOAT:
-            return np.vstack(EOAT)
+
+        return np.vstack(EOAT)
 
 
     # Plot of EOAT Position 
@@ -242,6 +250,11 @@ class Robot:
     ####################################################################################################################
     # Definition to Set Joint Torques using dynamics
     def set_JointStates(self, target_q):
+
+        # Entry flag and Timer
+        Entry_Flag = True
+        Entry_Timer = clock()
+
         # Disable Dynamic Compensation
         print ('Terminating Dynamic Compensation!')
         self.SDC_Flag.set()
@@ -258,6 +271,7 @@ class Robot:
 
         
         # Joint Position Dynamics Defaults
+        # Julian's P=5 D=0.1
         self.Kp = np.array([1,        3,        1.35])
         self.Kd = np.array([0.01,     0.09,     0.1])
         self.Ki = np.array([8e-4,     8e-4,     3.5e-4])
@@ -267,8 +281,10 @@ class Robot:
         int_err = np.zeros(3)
 
         for i in range(500):
+            # Loop Timer
+            if not Entry_Flag:
+                loop_timer = clock()
 
-            
             # Compute Positional Errors
             pro_err  = q_goal - q
             der_err  = pre_err - pro_err
@@ -286,24 +302,20 @@ class Robot:
             q, v = self.calibrated_states()
             self.set_pos = q
 
-            q_log.append(q[2])
-
-            sleep(0.5e-3)
-
-            print (f'Iteration: {i} \t Target Position: {np.rad2deg(q_goal)} \t Current Position: {np.rad2deg(q)}')
-            
+            # Attempt to send joint command every 1ms
+            if Entry_Flag:
+                Entry_Flag = False
+                delay = Entry_Timer - clock()
+                sleep (abs(1e-3 - delay))
+            else:
+                delay = loop_timer - clock()
+                sleep (abs(1e-3 - delay))
+        
         # Restart Dynamic Compensation
         print ('Restarting Dynamic Compensation')
         self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
         self.SDC_Flag.clear()
         self.SetDynamicCompensation.start()
-        
-        """
-        plt.plot(np.rad2deg(q_goal[2]- q_log), label='q')
-            
-        plt.grid(True)
-        plt.legend(loc='best')
-        plt.show()"""
 
 
     ####################################################################################################################
@@ -314,9 +326,17 @@ class Robot:
         print ('Setting in Dynamic Compensation!')
         while not self.SDC_Flag.is_set():
             # Computing Inverse Dynamics for hold torque
+            timer = clock()
+
             #gu = pin.computeGeneralizedGravity(self.model, self.model_data, self.set_pos)
             tau = pin.rnea(self.model, self.model_data, self.set_pos, self.set_vel, np.zeros(3))
             self.device.send_joint_torque(tau)
+
+            # Attempt to send an joint command every 1ms
+            compute_time = clock() - timer
+            sleep(abs(1e-3 - compute_time))
+        
+            
   
 
 #######################################################################################################################
@@ -324,7 +344,8 @@ class Robot:
 #######################################################################################################################
 if __name__ == "__main__":
     robot  = Robot(NYUFingerReal(), 'enp5s0')
-    q, v = robot.calibrated_states()
+    robot.set_JointStates(np.ones(3))
+        
     
     
 
