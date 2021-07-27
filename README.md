@@ -21,6 +21,4 @@ pip3 install -r requirements.txt
 * Additionally, check the github links [1] & [2] for detailed installation instructions.
 
 ## Contact
-* email: navalekanishk@gmail.com
-* phone: +49 176 5783 1504
-* website: https://kanishknavale.github.io/
+* email: navale@is.mpg.de
