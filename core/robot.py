@@ -11,14 +11,13 @@ import sys
 import os
 from threading import Thread, Event
 from multiprocessing import Process
-from time import sleep, clock
+from time import sleep
 
 # For using 'Forge' Functionalities
 sys.path.append('forge')
 from robot_simulator import NYUFingerSimulator
 
 # Using OpenRobots Scripts
-from nyu_finger import NYUFingerReal
 import pinocchio as pin
 
 # For Manipulating Tensors
@@ -175,10 +174,7 @@ class Robot:
             2. np.array (3,): Realtime Offset Velocity
         """
 
-        if self.hardware:
-            q, v = self.device.get_state()
-        else:
-            q, v = self.simulator.get_state()
+        q, v = self.simulator.get_state()
 
         return q - self.joint_offsets, v - self.vel_offsets
 

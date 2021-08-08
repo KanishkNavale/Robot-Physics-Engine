@@ -1,7 +1,5 @@
 ######################################################################################################################
-# DEVELOPED BY KANISHK                                                                                   #############
-# MAX PLANCK INSTITUTE FOR INTELLIGENT SYSTEMS                                                           #############
-# STUTTGART, GERMANY                                                                                     #############
+# DEVELOPED BY KANISHK                                                                                   #############                                                                                    #############
                                                                                                          #############
 # THIS SCRIPT DEFINES POSSIBLE DEMOS FOR ROBOT                                                           #############
 ######################################################################################################################
@@ -18,7 +16,7 @@ import numpy as np
 # MAIN SECTION                                                                                           #############
 ######################################################################################################################
 if __name__ == '__main__':
-    nyu_finger = Robot(connect_hardware=False)
+    nyu_finger = Robot()
     
     # To Make the robot wait for the specified seconds
     nyu_finger.wait(1)
