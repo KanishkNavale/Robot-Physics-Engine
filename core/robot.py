@@ -1,7 +1,5 @@
 ######################################################################################################################
 # DEVELOPED BY KANISHK                                                                                   #############
-# MAX PLANCK INSTITUTE FOR INTELLIGENT SYSTEMS                                                           #############
-# STUTTGART, GERMANY                                                                                     #############
                                                                                                          #############
 # THIS SCRIPT CONSTRUCTS A ROBOT CLASS BASED ON FUNCTIONALITIES FROM THE 'FORGE'                         #############
 ######################################################################################################################
@@ -41,7 +39,7 @@ import pygame
 class Robot:
     """ Contructs a class for the 'nyu_finger' robot """
 
-    def __init__(self, comms='enp5s0', connect_hardware=True, controller=None):
+    def __init__(self, controller=None):
         """
         Description:
             1. Initiates, Builds & Starts Robot Model components and hardware.
@@ -49,24 +47,10 @@ class Robot:
             3. Runs Inverse Dynamic Compensation as parallel process (thread).
             4. Invokes 'self.offset_states()' which reads the first starting position of robot and makes it Zero.
 
-        Args:
-            1. comms = Binds the robot communication to an ethernet port. Uses 'enp5s0' as a defualt port.
-            2. connect_hardware = True (default). Connects to the robot hardware if enabled else, runs as simulation.
-
         Keyword Args:
             1. controller = 'None': Does not initialize any joystick mode for the robot.
                             'keyboard': Enables joystick mode on the keyboard. 
         """
-        
-        # Init. Hardware
-        self.hardware = connect_hardware
-
-        if self.hardware:
-            try:
-                self.device = NYUFingerReal()
-                self.device.initialize(comms)
-            except Exception as e:
-                print(f'Robot Hardware Initiation Error: {e}')
 
         # Load the .urdf files
         self.package_dir = os.path.abspath(os.getcwd())
@@ -91,10 +75,7 @@ class Robot:
         self.Base_ID = self.model.getFrameId('base_link')
 
         # Offset Joint Values
-        if self.hardware:
-            q, v = self.device.get_state()
-        else:
-            q, v = self.simulator.get_state()
+        q, v = self.simulator.get_state()
 
         self.joint_offsets = q
         self.vel_offsets = v
@@ -106,13 +87,6 @@ class Robot:
         q, v = self.offset_states()
         self.set_pos = q
         self.set_vel = v
-        
-        # Enable Dynamic Compensation
-        if self.hardware:
-            self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
-            self.SDC_Flag = Event()
-            self.SDC_Flag.clear()
-            self.SetDynamicCompensation.start()
 
         # Refresh Display
         self.update_simulator = Thread(target=self.refresh_viz)
@@ -404,149 +378,17 @@ class Robot:
         if save:
            plt.savefig('Trajectory_Plot.png') 
 
-
-    ####################################################################################################################
-    # COLLISIONS COMPUTATION                                                                              ##############
-    ####################################################################################################################
-
-    def compute_Collisions(self,q):
-        """
-        Description:
-            1. Computes the robot collision using the pinocchio library
-
-        Args:
-            q -> np.array (3,) : Joint Positions of the robot.
-
-        Returns:
-            bool: Robot in Collision
-        """
-
-        pin.computeCollisions(self.model, self.model_data, self.collision_model ,self.collision_data, q, False)
-
-        for k in range(len(self.collision_model.collisionPairs)): 
-            cr = self.collision_data.collisionResults[k]
-
-        self.viz.displayCollisions(True)
-        self.viz.displayVisuals(True)
-
-        return cr.isCollision()
-
-
     ####################################################################################################################
     # JOINT DYNAMICS                                                                                      ##############
     ####################################################################################################################
-    def set_JointStates(self, target_q, verbose=False):
+    def set_JointStates(self, target_q):
         """
         Description:
             1. Moves the robot joints to designated target joint positions.
-            2. invoked, disables the parallel process of Inverse Dynamic Compensation.
-            3. Moves the robot to traget position using PID Controller.
-            4. On reaching the target position, re-enables the Inverse Dynamic Compensation.
 
         Args:
             target_q -> np.array (3,): Target joint positions of the robot.
             
-        Keyword Args:
-            verbose: Prints interminent process information. Defaults to False.
         """
-        if self.hardware:
-            # Entry flag and Timer
-            Entry_Flag = True
-            Entry_Timer = clock()
-
-            # Disable Dynamic Compensation
-            if verbose:
-                print ('Terminating Dynamic Compensation!')
-            self.SDC_Flag.set()
-            self.SetDynamicCompensation.join()
-
-            # Chart for tuning
-            q_log = []
-
-            # Goal Set Points
-            q_goal = target_q
-
-            # Init. Values
-            q, v = self.offset_states()
-
-            # Joint Position Dynamics Defaults
-            # Julian's P=5 D=0.1
-            self.Kp = np.array([1,        3,        1.35])
-            self.Kd = np.array([0.01,     0.09,     0.1])
-            self.Ki = np.array([8e-4,     8e-4,     3.5e-4])
-
-            # Error Inits.
-            pre_err = np.zeros(3)
-            int_err = np.zeros(3)
-
-            for i in range(500):
-                # Loop Timer
-                if not Entry_Flag:
-                    loop_timer = clock()
-
-                # Compute Positional Errors
-                pro_err  = q_goal - q
-                der_err  = pre_err - pro_err
-                int_err += pro_err
-                pre_err = pro_err
-
-                # Positional controller
-                u  = self.Kp* pro_err
-                u += self.Ki* int_err
-                u += self.Kd* der_err
-
-                # Send torque commands
-                self.device.send_joint_torque(u)
-                    
-                q, v = self.offset_states()
-                self.set_pos = q
-
-                # Attempt to send joint command every 1ms
-                if Entry_Flag:
-                    Entry_Flag = False
-                    delay = Entry_Timer - clock()
-                    sleep (abs(1e-3 - delay))
-                else:
-                    delay = loop_timer - clock()
-                    sleep (abs(1e-3 - delay))
-            
-            # Restart Dynamic Compensation
-            if verbose:
-                print ('Restarting Dynamic Compensation')
-            self.SetDynamicCompensation = Thread(target=self.DynamicCompensation)
-            self.SDC_Flag.clear()
-            self.SetDynamicCompensation.start()
         
-        else:
-            self.simulator.reset_state(target_q, np.zeros(3))
-
-
-    ####################################################################################################################
-    # GRAVITY COMPENSATION + Other Inverse Dynamics Compensations                                         ##############
-    ####################################################################################################################
-
-    def DynamicCompensation(self, verbose=False):
-        """
-        Description:
-            1. Managed by a thread process.
-            2. Helps to retain the position in the real world against external forces.
-            3. Command cycle rate is 1000Hz
-
-        Keyword Args:
-            verbose: Prints interminent process information. Defaults to False.
-        """
-
-        if verbose:
-            print ('Setting in Dynamic Compensation!')
-
-        while not self.SDC_Flag.is_set():
-            # Computing Inverse Dynamics for hold torque
-            timer = clock()
-
-            #gu = pin.computeGeneralizedGravity(self.model, self.model_data, self.set_pos)
-            tau = pin.rnea(self.model, self.model_data, self.set_pos, self.set_vel, np.zeros(3))
-            self.device.send_joint_torque(tau)
-
-            # Attempt to send an joint command every 1ms
-            compute_time = clock() - timer
-            sleep(abs(1e-3 - compute_time))      
+        self.simulator.reset_state(target_q, np.zeros(3))

@@ -1,24 +1,21 @@
-# Pinocchio Based Robot Solver
-This repository implements Kinematics & Dynamics Solver for the robot 'nyu_finger' using the 'pinocchio libraries'.
+# Optimization Based Robot Physics Engine
 
-1. "nyu_finger": https://github.com/open-dynamic-robot-initiative/nyu_finger
-2. "pinocchio": https://github.com/stack-of-tasks/pinocchio
+## About
+This repository implements an optimization strategy for singularity free trajectory generation for serial robot.
+Also, implements numerical stable math Inverse Kinematics & Dynamics mapping.
 
-## Description
-1. Rendering of the model in Meshcatviwer,
-    <p align="left"><img src="pictures/snap_viewer.png" width="300"></p>
-2. Plotting Trajectories,
-    <p align="left"><img src="pictures/trajectory_viewer.png" width="300"></p>
-3. Testing of Inverse Dynamic Compensation,
-    <p align="left"><img src="pictures/Inverse Dynamics.gif" width="300"></p>
+## Robot Functionalities
+1. Move the in Joint, Linear & Circular Path.
+2. Circular Path needs 3-Points for trajectory generation.
 
+## Codebase Structure
+1. [core](core): Implements the core math for the robot.
+2. [forge](forge): Holds simulator script.
+3. [model](model): Contains the .urdf files of the robot.
+4. [demos](demos): Description on how to use the robot.
 
-## Dependencies
-Install dependencies using:
-```bash
-pip3 install -r requirements.txt 
-```
-* Additionally, check the github links [1] & [2] for detailed installation instructions.
+## Developer
+1. Name: Kanishk Navale
+2. Email: navalekanishk@gmail.com
+3. Website: https://kanishknavale.github.io/
 
-## Contact
-* email: navale@is.mpg.de
