@@ -14,7 +14,10 @@ Also, implements numerical stable math for Inverse Kinematics & Dynamics estimat
 3. [model](model): Contains the .urdf files of the robot.
 4. [demos](demos): Description on how to use the robot.
 
-## Preview
+## Peak & Preview
+|Simulator |RNEA Algorithm Test|
+| :---:| :---:|
+|<img src="pictures/pose.png" width="300">|<img src="pictures/rnea.gif" width="248">|
 
 ## Developer
 1. Name: Kanishk Navale
