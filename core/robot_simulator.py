@@ -1,20 +1,22 @@
-#///////////////////////////////////////////////////////////////////////////////
-#// BSD 3-Clause License
-#//
-#// Copyright (C) 2018-2019, New York University , Max Planck Gesellschaft
-#// Copyright note valid unless otherwise stated in individual files.
-#// All rights reserved.
-#///////////////////////////////////////////////////////////////////////////////
+
+# ///////////////////////////////////////////////////////////////////////////////
+# // BSD 3-Clause License
+# //
+# // Copyright (C) 2020, New York University , Max Planck Gesellschaft
+# // Copyright note valid unless otherwise stated in individual files.
+# // All rights reserved.
+# ///////////////////////////////////////////////////////////////////////////////
 
 import pybullet as p
+from pinocchio.robot_wrapper import RobotWrapper
 import pinocchio as se3
 import numpy as np
-from time import sleep
-
 from pinocchio.utils import zero
 
+
 class PinBulletWrapper(object):
-    def __init__(self, robot_id, pinocchio_robot, joint_names, endeff_names, useFixedBase=False):
+    def __init__(self, robot_id, pinocchio_robot, joint_names,
+                 endeff_names, useFixedBase=False):
         self.nq = pinocchio_robot.nq
         self.nv = pinocchio_robot.nv
         self.nj = len(joint_names)
@@ -28,29 +30,37 @@ class PinBulletWrapper(object):
 
         bullet_joint_map = {}
         for ji in range(p.getNumJoints(robot_id)):
-            bullet_joint_map[p.getJointInfo(robot_id, ji)[1].decode('UTF-8')] = ji
+            bullet_joint_map[p.getJointInfo(
+                robot_id, ji)[1].decode('UTF-8')] = ji
 
-        self.bullet_joint_ids = np.array([bullet_joint_map[name] for name in joint_names])
-        self.pinocchio_joint_ids = np.array([pinocchio_robot.model.getJointId(name) for name in joint_names])
+        self.bullet_joint_ids = np.array(
+            [bullet_joint_map[name] for name in joint_names])
+        self.pinocchio_joint_ids = np.array(
+            [pinocchio_robot.model.getJointId(name) for name in joint_names])
 
         self.pin2bullet_joint_only_array = []
 
         if not self.useFixedBase:
             for i in range(2, self.nj + 2):
-                self.pin2bullet_joint_only_array.append(np.where(self.pinocchio_joint_ids == i)[0][0])
+                self.pin2bullet_joint_only_array.append(
+                    np.where(self.pinocchio_joint_ids == i)[0][0])
         else:
             for i in range(1, self.nj + 1):
-                self.pin2bullet_joint_only_array.append(np.where(self.pinocchio_joint_ids == i)[0][0])
-
+                self.pin2bullet_joint_only_array.append(
+                    np.where(self.pinocchio_joint_ids == i)[0][0])
 
         # Disable the velocity control on the joints as we use torque control.
-        p.setJointMotorControlArray(robot_id, self.bullet_joint_ids, p.VELOCITY_CONTROL, forces=np.zeros(self.nj))
+        p.setJointMotorControlArray(
+            robot_id, self.bullet_joint_ids, p.VELOCITY_CONTROL,
+            forces=np.zeros(self.nj))
 
         # In pybullet, the contact wrench is measured at a joint. In our case
-        # the joint is fixed joint. Pinocchio doesn't add fixed joints into the joint
-        # list. Therefore, the computation is done wrt to the frame of the fixed joint.
-        self.bullet_endeff_ids = [bullet_joint_map[name] for name in endeff_names]
-        self.pinocchio_endeff_ids = [pinocchio_robot.model.getFrameId(name) for name in endeff_names]
+        # joint is fixed joint. Pinocchio doesn't add fixed joints into joint
+        # list. Therefore, computation is done wrt to the frame of fixed joint.
+        self.bullet_endeff_ids = [bullet_joint_map[name]
+                                  for name in endeff_names]
+        self.pinocchio_endeff_ids = [
+            pinocchio_robot.model.getFrameId(name) for name in endeff_names]
 
     def _action(self, pos, rot):
         res = np.zeros((6, 6))
@@ -60,7 +70,7 @@ class PinBulletWrapper(object):
         return res
 
     def get_force(self):
-        """ Returns the force readings as well as the set of active contacts """
+        """ Returns force readings as well as the set of active contacts """
         active_contacts_frame_ids = []
         contact_forces = []
 
@@ -95,8 +105,10 @@ class PinBulletWrapper(object):
             force = np.zeros(6)
 
             force[:3] = normal_force * np.array(contact_normal) + \
-                        lateral_friction_force_1 * np.array(lateral_friction_direction_1) + \
-                        lateral_friction_force_2 * np.array(lateral_friction_direction_2)
+                lateral_friction_force_1 * \
+                np.array(lateral_friction_direction_1) + \
+                lateral_friction_force_2 * \
+                np.array(lateral_friction_direction_2)
 
             contact_forces.append(force)
 
@@ -124,7 +136,7 @@ class PinBulletWrapper(object):
             dq[:3] = vel
             dq[3:6] = orn
 
-            # Pinocchio assumes the base velocity to be in the body frame -> rotate.
+            # Pinocchio assumes base velocity to be in body frame -> rotate.
             rot = np.array(p.getMatrixFromQuaternion(q[3:7])).reshape((3, 3))
             dq[0:3] = rot.T.dot(dq[0:3])
             dq[3:6] = rot.T.dot(dq[3:6])
@@ -167,25 +179,26 @@ class PinBulletWrapper(object):
         return q, dq
 
     def reset_state(self, q, dq):
-        vec2list = lambda m: np.array(m.T).reshape(-1).tolist()
+        def vec2list(m): return np.array(m.T).reshape(-1).tolist()
 
         if not self.useFixedBase:
-            p.resetBasePositionAndOrientation(self.robot_id, vec2list(q[:3]), vec2list(q[3:7]))
+            p.resetBasePositionAndOrientation(
+                self.robot_id, vec2list(q[:3]), vec2list(q[3:7]))
 
-            # Pybullet assumes the base velocity to be aligned with the world frame.
+            # Pybullet assumes base velocity to be aligned with world frame.
             rot = np.array(p.getMatrixFromQuaternion(q[3:7])).reshape((3, 3))
-            p.resetBaseVelocity(self.robot_id, vec2list(rot.dot(dq[:3])), vec2list(rot.dot(dq[3:6])))
+            p.resetBaseVelocity(self.robot_id, vec2list(
+                rot.dot(dq[:3])), vec2list(rot.dot(dq[3:6])))
 
             for i, bullet_joint_id in enumerate(self.bullet_joint_ids):
                 p.resetJointState(self.robot_id, bullet_joint_id,
-                    q[5 + self.pinocchio_joint_ids[i]],
-                    dq[4 + self.pinocchio_joint_ids[i]])
+                                  q[5 + self.pinocchio_joint_ids[i]],
+                                  dq[4 + self.pinocchio_joint_ids[i]])
         else:
             for i, bullet_joint_id in enumerate(self.bullet_joint_ids):
                 p.resetJointState(self.robot_id, bullet_joint_id,
-                    q[self.pinocchio_joint_ids[i] - 1],
-                    dq[self.pinocchio_joint_ids[i] - 1])
-
+                                  q[self.pinocchio_joint_ids[i] - 1],
+                                  dq[self.pinocchio_joint_ids[i] - 1])
 
     def send_joint_command(self, tau):
         # TODO: Apply the torques on the base towards the simulator as well.
@@ -196,6 +209,61 @@ class PinBulletWrapper(object):
 
         zeroGains = tau.shape[0] * (0.,)
 
-        p.setJointMotorControlArray(self.robot_id, self.bullet_joint_ids, p.TORQUE_CONTROL,
-                forces=tau[self.pin2bullet_joint_only_array],
-                positionGains=zeroGains, velocityGains=zeroGains)
+        p.setJointMotorControlArray(self.robot_id, self.bullet_joint_ids,
+                                    p.TORQUE_CONTROL, forces=tau[
+                                        self.pin2bullet_joint_only_array],
+                                    positionGains=zeroGains,
+                                    velocityGains=zeroGains)
+
+
+class NYUFingerSimulator:
+    def __init__(self, package_dir, urdf_path):
+        # Connet to pybullet and setup simulation parameters.
+        p.connect(p.GUI)
+        p.setGravity(0, 0, 0)
+        p.setPhysicsEngineParameter(fixedTimeStep=1.0/1000.0, numSubSteps=1)
+
+        # Zoom onto the robot.
+        p.resetDebugVisualizerCamera(1.0, 50, -35, (0., 0., 0.))
+
+        # Disable the gui controller as we don't use them.
+        # p.configureDebugVisualizer(p.COV_ENABLE_GUI,0)
+
+        ###
+        # Load the finger robot
+        robotStartPos = [0., 0, .0]
+        robotStartOrientation = p.getQuaternionFromEuler([0, 0, 0])
+        # package_dir = os.path.abspath(os.getcwd())
+        # urdf_path = package_dir + '/model/fingeredu.urdf'
+
+        self.robotId = p.loadURDF(urdf_path, robotStartPos,
+                                  robotStartOrientation,
+                                  flags=p.URDF_USE_INERTIA_FROM_FILE,
+                                  useFixedBase=True)
+
+        # Create pinocchio robot
+        self.pin_robot = RobotWrapper.BuildFromURDF(urdf_path, package_dir)
+
+        # Create a wrapper between the pinocchio and pybullet robot.
+        joint_names = [
+            #     'base_to_finger',
+            'finger_base_to_upper_joint',  # HAA
+            'finger_upper_to_middle_joint',  # HFE
+            'finger_middle_to_lower_joint',  # KFE
+            #     'finger_lower_to_tip_joint'
+        ]
+
+        self.robot = PinBulletWrapper(
+            self.robotId, self.pin_robot, joint_names, [], True)
+
+    def get_state(self):
+        return self.robot.get_state()
+
+    def reset_state(self, q, v):
+        self.robot.reset_state(q, v)
+
+    def send_joint_torque(self, tau):
+        self.robot.send_joint_command(tau)
+
+    def step(self):
+        p.stepSimulation()
