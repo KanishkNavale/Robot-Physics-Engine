@@ -16,7 +16,7 @@ if __name__ == '__main__':
     # Import 'Robot' class from the 'core'
     from robot import Robot
 
-    nyu_finger = Robot(connect_hardware=False, controller='keyboard')
+    nyu_finger = Robot(controller='keyboard')
 
     # Move to a Singularity Free Pose
     nyu_finger.Move_P2P(goal_pos=nyu_finger.parking_pose, mode='joint')
