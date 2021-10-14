@@ -16,17 +16,19 @@ This repository implements an optimization strategy for singularity free traject
 
 1. Joint-Space PID Controller,
 
-<p align="center">
-    <img src="pictures/Joint-Space Inverse Dynamics.png" width="450">
-</p>
+<img src="pictures/Joint-Space Inverse Dynamics.png" width="450">
 
 2. Task-Space PID Controller,
 
-<p align="center">
-    <img src="pictures/Task-Space Inverse Dynamics.png" width="450">
-</p>
+<img src="pictures/Task-Space Inverse Dynamics.png" width="450">
 
 Source: <https://www.diag.uniroma1.it/~deluca/rob2_en/material_rob2_en.html>
+
+## Preview
+
+|Joint Space Control|Task Space Control|
+|:--:|:--:|
+|<img src="pictures/joint.gif" width="448">|<img src="pictures/linear.gif" width="450">|
 
 ## Developer
 

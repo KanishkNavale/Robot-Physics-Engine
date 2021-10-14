@@ -129,7 +129,7 @@ class SimPD:
             JM = M @ linalg.pinv(J)
 
             # Compute & Send Torques
-            self.TAU = (JM @ tau) + N - (JM @ DJ @ self.joint_velocities)
+            self.TAU = (JM @ tau) + N - 2 * (JM @ DJ @ self.joint_velocities)
             self.clipped_TAU = np.clip(self.TAU, -10, 10)
 
             self.simulator.send_joint_torque(self.clipped_TAU)
