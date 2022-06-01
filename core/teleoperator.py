@@ -8,7 +8,7 @@
 import pygame
 import numpy as np
 from threading import Thread
-import memory
+import core.configuration.configuration as configuration
 
 
 #############################################################################
@@ -87,7 +87,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction +Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([0,
+                        target = configuration.pose + np.array([0,
                                                          self.step_size,
                                                          0])
                         self.LinearPlanner(target)
@@ -99,7 +99,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction -Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([0,
+                        target = configuration.pose + np.array([0,
                                                          -self.step_size,
                                                          0])
                         self.LinearPlanner(target)
@@ -111,7 +111,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction -X')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([-self.step_size,
+                        target = configuration.pose + np.array([-self.step_size,
                                                          0,
                                                          0])
                         self.LinearPlanner(target)
@@ -123,7 +123,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction +X')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([self.step_size, 0, 0])
+                        target = configuration.pose + np.array([self.step_size, 0, 0])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')
                         self.RenderText('Waiting for a New Input!')
@@ -133,7 +133,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction +Z')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([0, 0, self.step_size])
+                        target = configuration.pose + np.array([0, 0, self.step_size])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')
                         self.RenderText('Waiting for a New Input!')
@@ -143,7 +143,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction -Z')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([0,
+                        target = configuration.pose + np.array([0,
                                                          0,
                                                          -self.step_size])
                         self.LinearPlanner(target)
@@ -155,7 +155,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction -X & -Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([-self.step_size,
+                        target = configuration.pose + np.array([-self.step_size,
                                                         -self.step_size, 0])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')
@@ -166,7 +166,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction -X & +Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([-self.step_size,
+                        target = configuration.pose + np.array([-self.step_size,
                                                         self.step_size, 0])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')
@@ -177,7 +177,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction +X & -Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([self.step_size,
+                        target = configuration.pose + np.array([self.step_size,
                                                         -self.step_size, 0])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')
@@ -188,7 +188,7 @@ class NumStick:
                         self.RenderText('Moving Robot: Direction +X & +Y')
 
                         self.RenderText('Moving the Robot')
-                        target = memory.pose + np.array([self.step_size,
+                        target = configuration.pose + np.array([self.step_size,
                                                         self.step_size, 0])
                         self.LinearPlanner(target)
                         self.RenderText('Done!')

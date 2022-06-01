@@ -1,193 +1,20 @@
-#############################################################################
-# DEVELOPED BY KANISHK                                          #############
-# THIS SCRIPT CONSTRUCTS A MOTION PLANNER FOR ROBOT.            #############
-#############################################################################
-
-# Library Imports
 import numpy as np
-from scipy import linalg
 from copy import deepcopy
 from time import sleep
-import pinocchio as pin
 from collections import deque
-from threading import Thread
-import memory
+
+import core.configuration.configuration as configuration
 
 
-#############################################################################
-# PID CONTROLLER CLASS                                          #############
-#############################################################################
-class SimPD:
-    def __init__(self, freq, simulator, model, data,
-                 FK_Solver, Jacobian_Solver, DJacobian_Solver,
-                 Kp, Kd, Ki, Lp, Ld, Li):
-        # Initialize Control based Terms
-        self.freq = freq
-        self.Kp = Kp
-        self.Kd = Kd
-        self.Ki = Ki
-        self.Ki_copy = Ki
-        self.Lp = Lp
-        self.Ld = Ld
-        self.Li = Li
-        self.Li_copy = Li
-        self.log = []
-        self.routine = 1
-        self.prev_routine = 0
-
-        # Initialize the State Readers
-        self.simulator = simulator
-        self.joint_positions = self.simulator.get_state()[0]
-        self.joint_velocities = self.simulator.get_state()[1]
-        self.desired_position = deepcopy(self.joint_positions)
-        self.desired_velocity = deepcopy(self.joint_velocities)
-        self.prev_DesiredPosition = np.ones(3)
-
-        # Initialize the Model based Compute Terms
-        self.model = model
-        self.data = data
-        self.FK_Solver = FK_Solver
-        self.Jacobian_Solver = Jacobian_Solver
-        self.DJacobian_Solver = DJacobian_Solver
-
-        # Thread Management
-        self.engage = True
-        self.controller = Thread(target=self.joint_control)
-        self.controller.start()
-
-    def joint_control(self):
-        while self.engage:
-            # Reset for the Integral History
-            if not np.array_equal(self.desired_position,
-                                  self.prev_DesiredPosition):
-                self.log = []
-
-            # Read the states
-            self.joint_positions = self.simulator.get_state()[0]
-            self.joint_velocities = self.simulator.get_state()[1]
-
-            # Control's Offline Term Estimates
-            M = pin.crba(self.model, self.data, self.joint_positions)
-            N = pin.nonLinearEffects(self.model, self.data,
-                                     self.joint_positions,
-                                     self.joint_velocities)
-
-            tau = (self.Kp * (self.desired_position - self.joint_positions) +
-                   self.Kd * (self.desired_velocity - self.joint_velocities) +
-                   self.Ki * np.sum(self.log))
-
-            self.TAU = M @ tau + N
-            self.clipped_TAU = np.clip(self.TAU, -10, 10)
-
-            self.simulator.send_joint_torque(self.clipped_TAU)
-            self.simulator.step()
-
-            # PID: Integral Anti-Windup
-            error = self.desired_position - self.joint_positions
-            if not np.array_equal(self.TAU, self.clipped_TAU):
-                sign_tau = np.sign(self.TAU)
-                sign_error = np.sign(error)
-                for i in range(sign_tau.shape[0]):
-                    if sign_tau[i] == sign_error[i]:
-                        self.Ki = 0
-                        break
-            else:
-                self.Ki = self.Ki_copy
-                self.log.append(error)
-
-            # Store the Desired Position
-            self.prev_DesiredPosition = self.desired_position
-
-            sleep(self.freq)
-
-    def taskspace_control(self):
-        while self.engage:
-            # Reset for the Integral History
-            if not np.array_equal(self.desired_position,
-                                  self.prev_DesiredPosition):
-                self.log = []
-
-            # Read the states
-            self.joint_positions = self.simulator.get_state()[0]
-            self.joint_velocities = self.simulator.get_state()[1]
-            y, v = self.FK_Solver(self.joint_positions,
-                                  self.joint_velocities)
-
-            # Control's Offline Term Estimates
-            M = pin.crba(self.model, self.data, self.joint_positions)
-            N = pin.nonLinearEffects(self.model, self.data,
-                                     self.joint_positions,
-                                     self.joint_velocities)
-
-            tau = (self.Lp * (self.desired_position - y) +
-                   self.Ld * (self.desired_velocity - v) +
-                   self.Li * np.sum(self.log))
-
-            # Build Online Control Terms
-            J = self.Jacobian_Solver(self.joint_positions)
-            DJ = J  # Naive Method as Pinocchio for DJ is not stable.
-            JM = M @ linalg.pinv(J)
-
-            # Compute & Send Torques
-            self.TAU = (JM @ tau) + N - 2 * (JM @ DJ @ self.joint_velocities)
-            self.clipped_TAU = np.clip(self.TAU, -10, 10)
-
-            self.simulator.send_joint_torque(self.clipped_TAU)
-            self.simulator.step()
-
-            # PID: Integral Anti-Windup
-            error = self.desired_position - y
-            if not np.array_equal(self.TAU, self.clipped_TAU):
-                sign_tau = np.sign(self.TAU)
-                sign_error = np.sign(error)
-                for i in range(sign_tau.shape[0]):
-                    if sign_tau[i] == sign_error[i]:
-                        self.Li = 0
-                        break
-            else:
-                self.Li = self.Li_copy
-                self.log.append(error)
-
-            # Store the Desired Position
-            self.prev_DesiredPosition = self.desired_position
-
-            sleep(self.freq)
-
-    def control_loop(self, routine):
-        self.routine = routine
-        if self.routine == 1:
-            # Check for Change in routine
-            if self.prev_routine != self.routine:
-                # Stop the current controller
-                self.engage = False
-                self.controller.join()
-                self.engage = True
-                self.controller = Thread(target=self.joint_control)
-                sleep(0.2)
-                self.controller.start()
-                self.prev_routine = self.routine
-
-        if self.routine == 2:
-            # Check for Change in routine
-            if self.prev_routine != self.routine:
-                # Stop the current controller
-                self.engage = False
-                self.controller.join()
-                # Start a new controller
-                self.engage = True
-                self.controller = Thread(target=self.taskspace_control)
-                sleep(0.2)
-                self.controller.start()
-                self.prev_routine = self.routine
-
-
-#############################################################################
-# Motion PLANNER                                                #############
-#############################################################################
 class MotionPlanner:
-    def __init__(self, model, model_data,
-                 controller, simulator,
-                 FK_solver, Jacobian_solver, JointLimits):
+    def __init__(self,
+                 model,
+                 model_data,
+                 controller,
+                 simulator,
+                 FK_solver,
+                 Jacobian_solver,
+                 JointLimits):
 
         self.model = model
         self.model_data = model_data
@@ -215,7 +42,7 @@ class MotionPlanner:
         """
         q, qdot = np.float32(self.simulator.get_state())
 
-        memory.pose = deepcopy(self.FK_solver(q, qdot))[0]
+        configuration.pose = deepcopy(self.FK_solver(q, qdot))[0]
         return q, qdot
 
     def CheckJoints(self, q):
@@ -229,19 +56,16 @@ class MotionPlanner:
         Returns:
             exception: Joint Limit Exception.
         """
-        if q[0] < -self.JointLimits[0] or \
-                q[0] > self.JointLimits[0]:
+        if q[0] < -self.JointLimits[0] or q[0] > self.JointLimits[0]:
             raise Exception("J1 Joint Limit Reached")
 
-        elif q[1] < -self.JointLimits[1] or \
-                q[1] > self.JointLimits[1]:
+        elif q[1] < -self.JointLimits[1] or q[1] > self.JointLimits[1]:
             raise Exception("J2 Joint Limit Reached")
 
-        elif q[2] < -self.JointLimits[2] or \
-                q[2] > self.JointLimits[2]:
+        elif q[2] < -self.JointLimits[2] or q[2] > self.JointLimits[2]:
             raise Exception("J3 Joint Limit Reached")
 
-    def SetStates(self, target_pos, target_vel, method):
+    def SetStates(self, target_pos:np.ndarray, target_vel:np.ndarray, method):
         """
         Description,
         1. Sends the target state to PID Planner.
@@ -255,7 +79,11 @@ class MotionPlanner:
         self.controller.desired_position = target_pos
         self.controller.desired_velocity = target_vel
 
-    def ComputeTime(self, init_pos, final_pos, init_vel, final_vel):
+    def ComputeTime(self,
+                    init_pos: np.ndarray,
+                    final_pos: np.ndarray,
+                    init_vel: np.ndarray,
+                    final_vel: np.ndarray) -> float:
         """
         Description,
         1. Computes the physical time between two positions based on
