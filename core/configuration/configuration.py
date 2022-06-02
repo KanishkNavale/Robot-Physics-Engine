@@ -30,8 +30,6 @@ class Cartesian_Controller_PID_Values:
 @dataclass
 class RobotConfiguration:
     parking_position: np.ndarray
-    current_position: np.ndarray
-    latest_stable_pose: np.ndarray
 
     controller_frequency: Tuple[float, float, float]
     joint_limits: Tuple[float, float, float]
@@ -39,6 +37,7 @@ class RobotConfiguration:
     cartesian_controller_pid: Cartesian_Controller_PID_Values
 
     enable_teleoperation: bool
+    teleoperation_mode: str
 
     @classmethod
     def from_dictionary(cls, dictionary: Dict[str, Any]) -> RobotConfiguration:
